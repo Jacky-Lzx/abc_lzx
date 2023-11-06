@@ -62,3 +62,8 @@ tags
 /cmake
 /cscope
 abc.history
+
+.cache/
+*.log
+*.bench
+logs/
