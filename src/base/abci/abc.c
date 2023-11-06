@@ -165,6 +165,7 @@ static int Abc_CommandAllExact               ( Abc_Frame_t * pAbc, int argc, cha
 static int Abc_CommandTestExact              ( Abc_Frame_t * pAbc, int argc, char ** argv );
 static int Abc_CommandMajGen                 ( Abc_Frame_t * pAbc, int argc, char ** argv );
 static int Abc_CommandOrchestrate            ( Abc_Frame_t * pAbc, int argc, char ** argv );
+static int Abc_CommandCustomRw               ( Abc_Frame_t * pAbc, int argc, char ** argv );
 static int Abc_CommandAIGAugmentation       ( Abc_Frame_t * pAbc, int argc, char ** argv );
 
 static int Abc_CommandLogic                  ( Abc_Frame_t * pAbc, int argc, char ** argv );
@@ -932,6 +933,7 @@ void Abc_Init( Abc_Frame_t * pAbc )
     Cmd_CommandAdd( pAbc, "Synthesis",    "faultclasses",  Abc_CommandFaultClasses,     0 );
     Cmd_CommandAdd( pAbc, "Synthesis",    "exact",         Abc_CommandExact,            1 );
     Cmd_CommandAdd( pAbc, "Synthesis",    "orchestrate",  Abc_CommandOrchestrate,     1 );
+    Cmd_CommandAdd( pAbc, "Synthesis",    "custom_rw",     Abc_CommandCustomRw,         1 );
     Cmd_CommandAdd( pAbc, "Synthesis",    "aigaug",       Abc_CommandAIGAugmentation,     1 );
 
     Cmd_CommandAdd( pAbc, "Exact synthesis", "bms_start",  Abc_CommandBmsStart,         0 );
@@ -7639,6 +7641,112 @@ usage:
     Abc_Print( -2, "\t-w       : (resub/rw/refactor)toggle detailed verbose printout [default = %s]\n", fVeryVerbose? "yes": "no" );
     Abc_Print( -2, "\t-h       : print the command usage\n");
     return 1;
+}
+
+int Abc_CommandCustomRw( Abc_Frame_t * pAbc, int argc, char ** argv )
+{
+    extern int Abc_CustomRw( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable );
+
+    Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc), * pDup;
+    int c, RetValue;
+    int fUpdateLevel;
+    int fPrecompute;
+    int fUseZeros;
+    int fVerbose;
+    int fVeryVerbose;
+    int fPlaceEnable;
+    // external functions
+    extern void Rwr_Precompute();
+
+    // set defaults
+    fUpdateLevel = 1;
+    fPrecompute  = 0;
+    fUseZeros    = 0;
+    fVerbose     = 0;
+    fVeryVerbose = 0;
+    fPlaceEnable = 0;
+    Extra_UtilGetoptReset();
+    while ( ( c = Extra_UtilGetopt( argc, argv, "lxzvwh" ) ) != EOF )
+    {
+        switch ( c )
+        {
+        case 'l':
+            fUpdateLevel ^= 1;
+            break;
+        case 'x':
+            fPrecompute ^= 1;
+            break;
+        case 'z':
+            fUseZeros ^= 1;
+            break;
+        case 'v':
+            fVerbose ^= 1;
+            break;
+        case 'w':
+            fVeryVerbose ^= 1;
+            break;
+        case 'p':
+            fPlaceEnable ^= 1;
+            break;
+        case 'h':
+            goto usage;
+        default:
+            goto usage;
+        }
+    }
+
+    if ( fPrecompute )
+    {
+        Rwr_Precompute();
+        return 0;
+    }
+
+    if ( pNtk == NULL )
+    {
+        Abc_Print( -1, "Empty network.\n" );
+        return 1;
+    }
+    if ( !Abc_NtkIsStrash(pNtk) )
+    {
+        Abc_Print( -1, "This command can only be applied to an AIG (run \"strash\").\n" );
+        return 1;
+    }
+    if ( Abc_NtkGetChoiceNum(pNtk) )
+    {
+        Abc_Print( -1, "AIG resynthesis cannot be applied to AIGs with choice nodes.\n" );
+        return 1;
+    }
+
+    // modify the current network
+    pDup = Abc_NtkDup( pNtk );
+    RetValue = Abc_CustomRw( pNtk, fUpdateLevel, fUseZeros, fVerbose, fVeryVerbose, fPlaceEnable );
+    if ( RetValue == -1 )
+    {
+        Abc_FrameReplaceCurrentNetwork( pAbc, pDup );
+        printf( "An error occurred during computation. The original network is restored.\n" );
+    }
+    else
+    {
+        Abc_NtkDelete( pDup );
+        if ( RetValue == 0 )
+        {
+            Abc_Print( 0, "Rewriting has failed.\n" );
+            return 1;
+        }
+    }
+    return 0;
+
+usage:
+    Abc_Print( -2, "usage: custom_rw\n" );
+//     Abc_Print( -2, "\t         performs technology-independent rewriting of the AIG\n" );
+//     Abc_Print( -2, "\t-l     : toggle preserving the number of levels [default = %s]\n", fUpdateLevel? "yes": "no" );
+//     Abc_Print( -2, "\t-z     : toggle using zero-cost replacements [default = %s]\n", fUseZeros? "yes": "no" );
+//     Abc_Print( -2, "\t-v     : toggle verbose printout [default = %s]\n", fVerbose? "yes": "no" );
+//     Abc_Print( -2, "\t-w     : toggle printout subgraph statistics [default = %s]\n", fVeryVerbose? "yes": "no" );
+// //    Abc_Print( -2, "\t-p     : toggle placement-aware rewriting [default = %s]\n", fPlaceEnable? "yes": "no" );
+//     Abc_Print( -2, "\t-h     : print the command usage\n");
+    return 1;
+
 }
 
 
