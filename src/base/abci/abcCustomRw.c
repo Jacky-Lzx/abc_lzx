@@ -122,6 +122,7 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
             continue;
 
         // for each cut, try to resynthesize it
+        printf("Rewriting node %d:\n", i);
         nGain = Rwr_NodeRewrite_lucky_draw( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable );
         if ( !(nGain > 0 || (nGain == 0 && fUseZeros)) )
             continue;

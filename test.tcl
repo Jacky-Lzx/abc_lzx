@@ -1,7 +1,7 @@
-# read circuits/adder.aig
+read circuits/adder.aig
 # read circuits/bar.aig
 # read circuits/div.aig
-read circuits/hyp.aig
+# read circuits/hyp.aig
 # read circuits/log2.aig
 # read circuits/max.aig
 # read circuits/multiplier.aig
@@ -13,7 +13,7 @@ ps
 
 custom_rw
 
-# cec
+cec
 ps
 
 quit

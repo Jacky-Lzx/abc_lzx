@@ -253,6 +253,13 @@ int Rwr_NodeRewrite_lucky_draw( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * 
     int nNodesSaveCur = -1; // Suppress "might be used uninitialized"
     int i, GainCur = -1, GainBest = -1;
     abctime clk, clk2;//, Counter;
+    
+    Vec_Ptr_t * GainCur_vec = Vec_PtrAlloc(0);
+    Vec_Ptr_t * nNodesSaved_vec = Vec_PtrAlloc(0);
+    Vec_Ptr_t * pGraph_vec = Vec_PtrAlloc(0);
+    Vec_Ptr_t * uPhase_vec = Vec_PtrAlloc(0);
+    Vec_Ptr_t * pCut_vec = Vec_PtrAlloc(0);
+    Vec_Ptr_t * vFaninsCur_vec = Vec_PtrAlloc(0);
 
     p->nNodesConsidered++;
     // get the required times
@@ -272,6 +279,7 @@ p->timeCut += Abc_Clock() - clk;
     printf( "%d ", Counter );
 */
     // go through the cuts
+    int cut_index = -1;
 clk = Abc_Clock();
     for ( pCut = pCut->pNext; pCut; pCut = pCut->pNext )
     {
@@ -279,6 +287,7 @@ clk = Abc_Clock();
         if ( pCut->nLeaves < 4 )
             continue;
 //            Cut_CutPrint( pCut, 0 ), printf( "\n" );
+        cut_index++;
 
         // get the fanin permutation
         uTruth = 0xFFFF & *Cut_CutReadTruth(pCut);
@@ -336,24 +345,112 @@ clk2 = Abc_Clock();
 p->timeEval += Abc_Clock() - clk2;
 
         // check if the cut is better than the current best one
-        if ( pGraph != NULL && GainBest < GainCur )
-        {
-            // save this form
-            nNodesSaveCur = nNodesSaved;
-            GainBest  = GainCur;
-            p->pGraph  = pGraph;
-            p->fCompl = ((uPhase & (1<<4)) > 0);
-            uTruthBest = 0xFFFF & *Cut_CutReadTruth(pCut);
-            // collect fanins in the
-            Vec_PtrClear( p->vFanins );
-            Vec_PtrForEachEntry( Abc_Obj_t *, p->vFaninsCur, pFanin, i )
-                Vec_PtrPush( p->vFanins, pFanin );
-        }
+        printf("\tStatus for cut %d: nNodesSaved - %d, GainCur - %d\n", cut_index, nNodesSaved, GainCur);
+
+        int *gain_cur = malloc(sizeof(int));
+        *gain_cur = GainCur; 
+        Vec_PtrPush(GainCur_vec, gain_cur);
+        
+        int *nNodesSaved_cur = malloc(sizeof(int));
+        *nNodesSaved_cur = nNodesSaved;
+        Vec_PtrPush(nNodesSaved_vec, nNodesSaved_cur);
+        
+        Vec_PtrPush(pGraph_vec, pGraph);
+        
+        unsigned *uPhase_cur = malloc(sizeof(unsigned));
+        *uPhase_cur = uPhase;
+        Vec_PtrPush(uPhase_vec, uPhase_cur);
+        
+        Vec_PtrPush(pCut_vec, pCut);
+
+        Vec_Ptr_t * vFaninsCur_cur = Vec_PtrAlloc(0);
+        Vec_PtrForEachEntry( Abc_Obj_t *, p->vFaninsCur, pFanin, i )
+            Vec_PtrPush( vFaninsCur_cur, pFanin );
+        Vec_PtrPush(vFaninsCur_vec, vFaninsCur_cur);
+
+        // if ( pGraph != NULL && GainBest < GainCur )
+        // {
+        //     // save this form
+        //     nNodesSaveCur = nNodesSaved;
+        //     GainBest  = GainCur;
+        //     p->pGraph  = pGraph;
+        //     p->fCompl = ((uPhase & (1<<4)) > 0);
+        //     uTruthBest = 0xFFFF & *Cut_CutReadTruth(pCut);
+        //     // collect fanins in the
+        //     Vec_PtrClear( p->vFanins );
+        //     Vec_PtrForEachEntry( Abc_Obj_t *, p->vFaninsCur, pFanin, i )
+        //         Vec_PtrPush( p->vFanins, pFanin );
+        // }
     }
 p->timeRes += Abc_Clock() - clk;
 
-    if ( GainBest == -1 )
+    int gain_index;
+    int *gain_t;
+    int gain_min = 100;
+    int gain_sum = 0;
+    Vec_PtrForEachEntry(int *, GainCur_vec, gain_t, gain_index) {
+        if (*gain_t == -100) {
+            continue;
+        }
+        if (gain_min > *gain_t) {
+            gain_min = *gain_t;
+        }
+    }
+    
+    // No feasible cut, return
+    if (gain_min == 100) {
         return -1;
+    }
+
+    Vec_PtrForEachEntry(int *, GainCur_vec, gain_t, gain_index) {
+        if (*gain_t == -100) {
+            continue;
+        }
+        *gain_t -= gain_min - 1;
+        gain_sum += *gain_t;
+    }
+
+    // Vec_PtrForEachEntry(int *, GainCur_vec, gain_t, gain_index) {
+    //     printf("Gain of cut %d: %d\n", gain_index, *gain_t);
+    // }
+    
+    // printf("Gain Sum: %d\n", gain_sum);
+    int gain_rand = rand() % gain_sum;
+    // printf("Gain random: %d\n", gain_rand);
+    
+    int select_index = 0;
+    Vec_PtrForEachEntry(int *, GainCur_vec, gain_t, gain_index) {
+        if (*gain_t == -100) continue;
+
+        if (*gain_t <= gain_rand) {
+            gain_rand -= *gain_t;
+        } else {
+            select_index = gain_index;
+            break;
+        }
+    }
+    printf("Selected index: %d\n", select_index);
+
+    nNodesSaved = *(int *)Vec_PtrEntry(nNodesSaved_vec, select_index);
+    GainCur = *(int *)Vec_PtrEntry(GainCur_vec, select_index) + (gain_min - 1);
+    pGraph = (Dec_Graph_t *)Vec_PtrEntry(pGraph_vec, select_index);
+    uPhase = *(unsigned *)Vec_PtrEntry(uPhase_vec, select_index);
+    pCut = (Cut_Cut_t *)Vec_PtrEntry(pCut_vec, select_index);
+    p->vFaninsCur = (Vec_Ptr_t *)Vec_PtrEntry(vFaninsCur_vec, select_index);
+
+    // save this form
+    nNodesSaveCur = nNodesSaved;
+    GainBest  = GainCur;
+    p->pGraph  = pGraph;
+    p->fCompl = ((uPhase & (1<<4)) > 0);
+    uTruthBest = 0xFFFF & *Cut_CutReadTruth(pCut);
+    // collect fanins in the
+    Vec_PtrClear( p->vFanins );
+    Vec_PtrForEachEntry( Abc_Obj_t *, p->vFaninsCur, pFanin, i )
+        Vec_PtrPush( p->vFanins, pFanin );
+
+    // if ( GainBest == -1 )
+    //     return -1;
 /*
     if ( GainBest > 0 )
     {
@@ -402,13 +499,15 @@ p->timeRes += Abc_Clock() - clk;
 
     p->nScores[p->pMap[uTruthBest]]++;
     p->nNodesGained += GainBest;
-    if ( fUseZeros || GainBest > 0 )
-    {
+    // if ( fUseZeros || GainBest > 0 )
+    // {
         p->nNodesRewritten++;
-    }
+    // }
 
     // report the progress
-    if ( fVeryVerbose && GainBest > 0 )
+    // if ( fVeryVerbose && GainBest > 0 )
+    // if ( fVeryVerbose )
+    if ( fVeryVerbose || 1)
     {
         printf( "Node %6s :   ", Abc_ObjName(pNode) );
         printf( "Fanins = %d. ", p->vFanins->nSize );
@@ -448,7 +547,7 @@ Dec_Graph_t * Rwr_CutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCu
     vSubgraphs = Vec_VecEntry( p->vClasses, p->pMap[uTruth] );
     p->nSubgraphs += vSubgraphs->nSize;
     // determine the best subgraph
-    GainBest = -1;
+    GainBest = -100;
     CostBest = ABC_INFINITY;
     Vec_PtrForEachEntry( Rwr_Node_t *, vSubgraphs, pNode, i )
     {
@@ -458,10 +557,10 @@ Dec_Graph_t * Rwr_CutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCu
         Vec_PtrForEachEntry( Rwr_Node_t *, vFaninsCur, pFanin, k )
             Dec_GraphNode(pGraphCur, k)->pFunc = pFanin;
         // detect how many unlabeled nodes will be reused
-        nNodesAdded = Dec_GraphToNetworkCount( pRoot, pGraphCur, nNodesSaved, LevelMax );
+        nNodesAdded = Dec_GraphToNetworkCount( pRoot, pGraphCur, nNodesSaved + 100, LevelMax );
         if ( nNodesAdded == -1 )
             continue;
-        assert( nNodesSaved >= nNodesAdded );
+        // assert( nNodesSaved >= nNodesAdded );
 /*
         // evaluate the cut
         if ( fPlaceEnable )
@@ -500,6 +599,7 @@ Dec_Graph_t * Rwr_CutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCu
         else
 */
         {
+            // printf("Test: %d %d %d\n", nNodesSaved, nNodesAdded, nNodesSaved - nNodesAdded);
             // count the gain at this node
             if ( GainBest < nNodesSaved - nNodesAdded )
             {
@@ -516,9 +616,9 @@ Dec_Graph_t * Rwr_CutEvaluate( Rwr_Man_t * p, Abc_Obj_t * pRoot, Cut_Cut_t * pCu
             }
         }
     }
-    if ( GainBest == -1 )
-        return NULL;
     *pGainBest = GainBest;
+    if ( GainBest == -100 )
+        return NULL;
     return pGraphBest;
 }
 
