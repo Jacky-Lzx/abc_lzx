@@ -58,7 +58,7 @@ extern void  Abc_PlaceUpdate( Vec_Ptr_t * vAddedCells, Vec_Ptr_t * vUpdatedNets 
   SeeAlso     []
 
 ***********************************************************************/
-int Abc_CustomRw( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable )
+int Abc_CustomRw( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable, int temperature )
 {
     extern int           Dec_GraphUpdateNetwork( Abc_Obj_t * pRoot, Dec_Graph_t * pGraph, int fUpdateLevel, int nGain );
     ProgressBar * pProgress;
@@ -122,9 +122,11 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
             continue;
 
         // for each cut, try to resynthesize it
-        printf("Rewriting node %d:\n", i);
-        nGain = Rwr_NodeRewrite_lucky_draw( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable );
-        if ( !(nGain > 0 || (nGain == 0 && fUseZeros)) )
+        // printf("Rewriting node %d:\n", i);
+        nGain = Rwr_NodeRewrite_lucky_draw( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable, temperature );
+        // if ( !(nGain > 0 || (nGain == 0 && fUseZeros)) )
+        //     continue;
+        if (nGain == -100)
             continue;
         // if we end up here, a rewriting step is accepted
 

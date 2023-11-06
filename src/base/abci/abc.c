@@ -7645,7 +7645,7 @@ usage:
 
 int Abc_CommandCustomRw( Abc_Frame_t * pAbc, int argc, char ** argv )
 {
-    extern int Abc_CustomRw( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable );
+    extern int Abc_CustomRw( Abc_Ntk_t * pNtk, int fUpdateLevel, int fUseZeros, int fVerbose, int fVeryVerbose, int fPlaceEnable, int temperature );
 
     Abc_Ntk_t * pNtk = Abc_FrameReadNtk(pAbc), * pDup;
     int c, RetValue;
@@ -7655,6 +7655,7 @@ int Abc_CommandCustomRw( Abc_Frame_t * pAbc, int argc, char ** argv )
     int fVerbose;
     int fVeryVerbose;
     int fPlaceEnable;
+    int temperature;
     // external functions
     extern void Rwr_Precompute();
 
@@ -7665,11 +7666,23 @@ int Abc_CommandCustomRw( Abc_Frame_t * pAbc, int argc, char ** argv )
     fVerbose     = 0;
     fVeryVerbose = 0;
     fPlaceEnable = 0;
+    temperature = 100;
     Extra_UtilGetoptReset();
-    while ( ( c = Extra_UtilGetopt( argc, argv, "lxzvwh" ) ) != EOF )
+    while ( ( c = Extra_UtilGetopt( argc, argv, "tlxzvwh" ) ) != EOF )
     {
         switch ( c )
         {
+        case 't':
+            if ( globalUtilOptind >= argc )
+            {
+                Abc_Print( -1, "Command line switch \"-N\" should be followed by an integer.\n" );
+                goto usage;
+            }
+            temperature = atoi(argv[globalUtilOptind]);
+            globalUtilOptind++;
+            if (temperature < 0 || temperature > 100)
+                goto usage;
+            break;
         case 'l':
             fUpdateLevel ^= 1;
             break;
@@ -7719,7 +7732,7 @@ int Abc_CommandCustomRw( Abc_Frame_t * pAbc, int argc, char ** argv )
 
     // modify the current network
     pDup = Abc_NtkDup( pNtk );
-    RetValue = Abc_CustomRw( pNtk, fUpdateLevel, fUseZeros, fVerbose, fVeryVerbose, fPlaceEnable );
+    RetValue = Abc_CustomRw( pNtk, fUpdateLevel, fUseZeros, fVerbose, fVeryVerbose, fPlaceEnable, temperature );
     if ( RetValue == -1 )
     {
         Abc_FrameReplaceCurrentNetwork( pAbc, pDup );
@@ -7740,6 +7753,7 @@ usage:
     Abc_Print( -2, "usage: custom_rw\n" );
 //     Abc_Print( -2, "\t         performs technology-independent rewriting of the AIG\n" );
 //     Abc_Print( -2, "\t-l     : toggle preserving the number of levels [default = %s]\n", fUpdateLevel? "yes": "no" );
+    Abc_Print( -2, "\t-t <0-100>    : temperature [default = %d]\n", temperature );
 //     Abc_Print( -2, "\t-z     : toggle using zero-cost replacements [default = %s]\n", fUseZeros? "yes": "no" );
 //     Abc_Print( -2, "\t-v     : toggle verbose printout [default = %s]\n", fVerbose? "yes": "no" );
 //     Abc_Print( -2, "\t-w     : toggle printout subgraph statistics [default = %s]\n", fVeryVerbose? "yes": "no" );

@@ -239,7 +239,7 @@ p->timeRes += Abc_Clock() - clk;
     return GainBest;
 }
 
-int Rwr_NodeRewrite_lucky_draw( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int fUpdateLevel, int fUseZeros, int fPlaceEnable )
+int Rwr_NodeRewrite_lucky_draw( Rwr_Man_t * p, Cut_Man_t * pManCut, Abc_Obj_t * pNode, int fUpdateLevel, int fUseZeros, int fPlaceEnable, int temperature )
 {
     int fVeryVerbose = 0;
     Dec_Graph_t * pGraph;
@@ -341,11 +341,11 @@ p->timeMffc += Abc_Clock() - clk2;
 
         // evaluate the cut
 clk2 = Abc_Clock();
-        pGraph = Rwr_CutEvaluate( p, pNode, pCut, p->vFaninsCur, nNodesSaved, Required, &GainCur, fPlaceEnable );
+        pGraph = Rwr_CutEvaluate( p, pNode, pCut, p->vFaninsCur, nNodesSaved, Required, &GainCur, fPlaceEnable);
 p->timeEval += Abc_Clock() - clk2;
 
         // check if the cut is better than the current best one
-        printf("\tStatus for cut %d: nNodesSaved - %d, GainCur - %d\n", cut_index, nNodesSaved, GainCur);
+        // printf("\tStatus for cut %d: nNodesSaved - %d, GainCur - %d\n", cut_index, nNodesSaved, GainCur);
 
         int *gain_cur = malloc(sizeof(int));
         *gain_cur = GainCur; 
@@ -384,10 +384,11 @@ p->timeEval += Abc_Clock() - clk2;
     }
 p->timeRes += Abc_Clock() - clk;
 
+    Vec_Ptr_t * draw_weights = Vec_PtrAlloc(0);
     int gain_index;
     int *gain_t;
     int gain_min = 100;
-    int gain_sum = 0;
+    int weight_sum = 0;
     Vec_PtrForEachEntry(int *, GainCur_vec, gain_t, gain_index) {
         if (*gain_t == -100) {
             continue;
@@ -399,15 +400,28 @@ p->timeRes += Abc_Clock() - clk;
     
     // No feasible cut, return
     if (gain_min == 100) {
-        return -1;
+        return -100;
     }
 
+    int *weight_t;
     Vec_PtrForEachEntry(int *, GainCur_vec, gain_t, gain_index) {
+        weight_t = malloc(sizeof(int));
         if (*gain_t == -100) {
+            * weight_t = -100;
+            Vec_PtrPush(draw_weights, weight_t);
             continue;
         }
-        *gain_t -= gain_min - 1;
-        gain_sum += *gain_t;
+        if (*gain_t >= 0) {
+            *weight_t = (*gain_t - (gain_min - 1)) * 10;
+        } else {
+            if (temperature == 0) {
+                *weight_t = 0;
+            } else {
+                *weight_t = (*gain_t - (gain_min - 1));
+            }
+        }
+        weight_sum += *weight_t;
+        Vec_PtrPush(draw_weights, weight_t);
     }
 
     // Vec_PtrForEachEntry(int *, GainCur_vec, gain_t, gain_index) {
@@ -415,11 +429,14 @@ p->timeRes += Abc_Clock() - clk;
     // }
     
     // printf("Gain Sum: %d\n", gain_sum);
-    int gain_rand = rand() % gain_sum;
+    if (weight_sum == 0) 
+        return -100;
+
+    int gain_rand = rand() % weight_sum;
     // printf("Gain random: %d\n", gain_rand);
     
     int select_index = 0;
-    Vec_PtrForEachEntry(int *, GainCur_vec, gain_t, gain_index) {
+    Vec_PtrForEachEntry(int *, draw_weights, gain_t, gain_index) {
         if (*gain_t == -100) continue;
 
         if (*gain_t <= gain_rand) {
@@ -429,14 +446,30 @@ p->timeRes += Abc_Clock() - clk;
             break;
         }
     }
-    printf("Selected index: %d\n", select_index);
+    
+    GainCur = *(int *)Vec_PtrEntry(GainCur_vec, select_index);
+
+    if (GainCur < 0) {
+        int rand_num = rand() % 100;
+        if (rand_num >= temperature) {
+            return -100;
+        }
+    }
 
     nNodesSaved = *(int *)Vec_PtrEntry(nNodesSaved_vec, select_index);
-    GainCur = *(int *)Vec_PtrEntry(GainCur_vec, select_index) + (gain_min - 1);
     pGraph = (Dec_Graph_t *)Vec_PtrEntry(pGraph_vec, select_index);
     uPhase = *(unsigned *)Vec_PtrEntry(uPhase_vec, select_index);
     pCut = (Cut_Cut_t *)Vec_PtrEntry(pCut_vec, select_index);
     p->vFaninsCur = (Vec_Ptr_t *)Vec_PtrEntry(vFaninsCur_vec, select_index);
+    
+#if 0
+    printf("Selected index: %d\n", select_index);
+    printf("nNodesSaved: %d\n", nNodesSaved);
+    printf("GainCur: %d\n", GainCur);
+    printf("pGraph: %p\n", pGraph);
+    printf("uPhase: %d\n", uPhase);
+    printf("pCut: %p\n", pCut);
+#endif
 
     // save this form
     nNodesSaveCur = nNodesSaved;
@@ -506,8 +539,8 @@ p->timeRes += Abc_Clock() - clk;
 
     // report the progress
     // if ( fVeryVerbose && GainBest > 0 )
-    // if ( fVeryVerbose )
-    if ( fVeryVerbose || 1)
+    if ( fVeryVerbose )
+    // if ( fVeryVerbose || 1)
     {
         printf( "Node %6s :   ", Abc_ObjName(pNode) );
         printf( "Fanins = %d. ", p->vFanins->nSize );
