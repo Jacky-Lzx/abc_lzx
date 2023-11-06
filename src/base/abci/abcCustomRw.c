@@ -122,7 +122,7 @@ Rwr_ManAddTimeCuts( pManRwr, Abc_Clock() - clk );
             continue;
 
         // for each cut, try to resynthesize it
-        nGain = Rwr_NodeRewrite( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable );
+        nGain = Rwr_NodeRewrite_lucky_draw( pManRwr, pManCut, pNode, fUpdateLevel, fUseZeros, fPlaceEnable );
         if ( !(nGain > 0 || (nGain == 0 && fUseZeros)) )
             continue;
         // if we end up here, a rewriting step is accepted
